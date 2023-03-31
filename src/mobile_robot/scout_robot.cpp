@@ -33,6 +33,8 @@ ScoutRobot::~ScoutRobot() {
 
 void ScoutRobot::EnableCommandedMode() { robot_->EnableCommandedMode(); }
 
+std::string ScoutRobot::sendRequest() { return  robot_->sendRequest(); }
+
 void ScoutRobot::Connect(std::string can_name) { robot_->Connect(can_name); }
 
 void ScoutRobot::Connect(std::string uart_name, uint32_t baudrate) {
@@ -49,6 +51,8 @@ void ScoutRobot::SetMotionCommand(double linear_vel, double angular_vel) {
   auto scout = dynamic_cast<ScoutInterface*>(robot_);
   scout->SetMotionCommand(linear_vel, angular_vel);
 }
+
+//std::string ScoutRobot::
 
 void ScoutRobot::DisableLightControl() { robot_->DisableLightControl(); }
 
@@ -67,6 +71,12 @@ ScoutActuatorState ScoutRobot::GetActuatorState() {
   auto scout = dynamic_cast<ScoutInterface*>(robot_);
   return scout->GetActuatorState();
 }
+
+ScoutCommonSensorState ScoutRobot::GetCommonSensorState() {
+  auto scout = dynamic_cast<ScoutInterface*>(robot_);
+  return scout->GetCommonSensorState();
+}
+
 
 ///////////////////////////////////////////////////////////////////////////
 

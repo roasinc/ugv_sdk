@@ -21,10 +21,14 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <time.h>
+#include <chrono>
 
 #include "ugv_sdk/details/async_port/async_can.hpp"
 #include "ugv_sdk/details/interface/robot_common_interface.hpp"
 #include "ugv_sdk/details/interface/parser_interface.hpp"
+
+using namespace std::chrono;
 
 namespace westonrobot {
 template <typename ParserType>
@@ -50,6 +54,7 @@ class AgilexBase : public RobotCommonInterface {
                                     this, std::placeholders::_1));
   }
 
+  int counter = 0;
   // switch to commanded mode
   void EnableCommandedMode() {
     // construct message
@@ -156,6 +161,22 @@ class AgilexBase : public RobotCommonInterface {
     return actuator_state_msgs_;
   }
 
+  CommonSensorStateMsgGroup GetCommonSensorStateMsgGroup() override {
+    std::lock_guard<std::mutex> guard(common_sensor_state_mtx_);
+    return common_sensor_state_msgs_;
+  }
+
+  ResponseVersionMsgGroup GetResponseVersionMsgGroup() override {
+    std::lock_guard<std::mutex> guard(response_version_mtx_);
+    return  response_version_msgs_;
+  }
+
+  MotorMsgGroup GetMotorMsgGroup() override {
+    std::lock_guard<std::mutex> guard(motor_state_mtx_);
+    return  motor_msgs;
+  }
+
+
  protected:
   ParserType parser_;
 
@@ -172,6 +193,20 @@ class AgilexBase : public RobotCommonInterface {
   ActuatorStateMsgGroup actuator_state_msgs_;
 
   /* feedback group 3: common sensor */
+  std::mutex common_sensor_state_mtx_;
+  CommonSensorStateMsgGroup common_sensor_state_msgs_;
+
+  std::mutex response_version_mtx_;
+  ResponseVersionMsgGroup response_version_msgs_;
+
+  std::mutex motor_state_mtx_;
+  MotorMsgGroup motor_msgs;
+
+  std::mutex bms_state_mtx_;
+  MotorMsgGroup bms_msgs;
+
+//  std::mutex response_version_mtx_;
+//  ResponseVersionMsgGroup response_version_msgs_;
 
   // communication interface
   bool can_connected_ = false;
@@ -201,11 +236,47 @@ class AgilexBase : public RobotCommonInterface {
     if (parser_.EncodeMessage(&msg, &frame)) can_->SendFrame(frame);
   }
 
+ std::string sendRequest()
+ {
+   can_frame frame;
+   frame.can_id = ((uint32_t)0x4a1);
+   frame.can_dlc = 8;
+   typedef struct {
+     uint8_t mode;
+   } CheckRequest;
+
+   CheckRequest tx_frame;
+
+   tx_frame.mode = 1;
+   memcpy(frame.data, (uint8_t *)(&tx_frame), frame.can_dlc);
+   can_->SendFrame(frame);
+
+   auto begin = system_clock::now();
+   while(true)
+   {
+     auto now = system_clock::now();
+     auto duration = duration_cast<seconds>(now - begin);
+     double dt = double(duration.count()) * seconds::period::num / seconds::period::den;
+     if(dt >= 3)
+       break;
+     if(response_version_msgs_.str_version_response.size() >= 80)
+       break;
+   }
+
+   return response_version_msgs_.str_version_response;
+ }
+
+
   void ParseCANFrame(can_frame *rx_frame) {
     AgxMessage status_msg;
+
     if (parser_.DecodeMessage(rx_frame, &status_msg)) {
+
       UpdateRobotCoreState(status_msg);
       UpdateActuatorState(status_msg);
+      UpdateCommonSensorState(status_msg);
+      UpdateResponseVersion(status_msg);
+      UpdateMotorState(status_msg);
     }
   }
 
@@ -275,6 +346,75 @@ class AgilexBase : public RobotCommonInterface {
             status_msg.body.v1_actuator_state_msg;
         break;
       }
+      default:
+        break;
+    }
+  }
+  void UpdateCommonSensorState(const AgxMessage &status_msg) {
+    std::lock_guard<std::mutex> guard(common_sensor_state_mtx_);
+//    std::cout << common_sensor_state_msgs_.bms_basic_state.battery_soc<< std::endl;
+    switch (status_msg.type) {
+      case AgxMsgBmsBasic: {
+//      std::cout << "system status feedback received" << std::endl;
+        common_sensor_state_msgs_.time_stamp = AgxMsgRefClock::now();
+        common_sensor_state_msgs_.bms_basic_state = status_msg.body.bms_basic_msg;
+        break;
+      }
+      default:
+        break;
+    }
+
+  }
+
+  void UpdateResponseVersion(const AgxMessage &status_msg){
+    std::lock_guard<std::mutex> guard(response_version_mtx_);
+    switch (status_msg.type) {
+      case AgxMsgVersionResponse: {
+
+      for (int i = 0;i<8;i++)
+      {
+        uint8_t data = status_msg.body.version_str[i];
+        if(data < 32 || data>126)
+          data = 32;
+        response_version_msgs_.str_version_response += data;
+//        std::cout << counter << std::endl;
+//        std::cout << std::hex << static_cast<int>(status_msg.body.version_str[i])  << " ";
+      }
+//      std::cout << std::endl;
+      counter++;
+      if(counter == 10)
+      {
+//        std::cout << response_version_msgs_.str_version_response << std::endl;
+        response_version_msgs_.str_version_response.clear();
+        counter=0;
+      }
+//      response_version_msgs_.str_version_response += "\n";
+
+
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  void UpdateMotorState(const AgxMessage &status_msg){
+    std::lock_guard<std::mutex> guard(motor_state_mtx_);
+    switch (status_msg.type) {
+      case AgxMsgMotorAngle: {
+
+        motor_msgs.MoterAngle.angle_5 = status_msg.body.motor_angle_msg.angle_5;
+        motor_msgs.MoterAngle.angle_6 = status_msg.body.motor_angle_msg.angle_6;
+        motor_msgs.MoterAngle.angle_7 = status_msg.body.motor_angle_msg.angle_7;
+        motor_msgs.MoterAngle.angle_8 = status_msg.body.motor_angle_msg.angle_8;
+        break;
+      }
+    case AgxMsgMotorSpeed: {
+        motor_msgs.MoterSpeed.speed_1 = status_msg.body.motor_speed_msg.speed_1;
+        motor_msgs.MoterSpeed.speed_2 = status_msg.body.motor_speed_msg.speed_2;
+        motor_msgs.MoterSpeed.speed_3 = status_msg.body.motor_speed_msg.speed_3;
+        motor_msgs.MoterSpeed.speed_4 = status_msg.body.motor_speed_msg.speed_4;
+      break;
+    }
       default:
         break;
     }

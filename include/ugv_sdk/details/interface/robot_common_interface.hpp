@@ -40,7 +40,22 @@ struct ActuatorStateMsgGroup {
   ActuatorStateMessageV1 actuator_state[AGX_MAX_ACTUATOR_NUM];     // v1 only
 };
 
-struct CommonSensorStateMsgGroup {};
+struct CommonSensorStateMsgGroup {
+  AgxMsgTimeStamp time_stamp;
+
+  BmsBasicMessage bms_basic_state;
+};
+
+struct ResponseVersionMsgGroup {
+  std::string str_version_response;
+  VersionResponseMessage version_response;
+};
+
+struct MotorMsgGroup {
+  MotorAngleMessage MoterAngle;
+  MotorSpeedMessage MoterSpeed;
+};
+
 
 class RobotCommonInterface {
  public:
@@ -48,6 +63,8 @@ class RobotCommonInterface {
 
   // functions to be implemented by class AgilexBase
   virtual void EnableCommandedMode() = 0;
+
+  virtual std::string sendRequest() = 0;
 
   // functions to be implemented by each robot class
   virtual void Connect(std::string can_name) = 0;
@@ -78,6 +95,25 @@ class RobotCommonInterface {
         "is supposed to be used.");
     return ActuatorStateMsgGroup{};
   };
+  virtual CommonSensorStateMsgGroup GetCommonSensorStateMsgGroup() {
+    throw std::runtime_error(
+        "Only a derived version of this function with actual implementation "
+        "is supposed to be used.");
+    return CommonSensorStateMsgGroup{};
+  };
+  virtual ResponseVersionMsgGroup GetResponseVersionMsgGroup() {
+    throw std::runtime_error(
+        "Only a derived version of this function with actual implementation "
+        "is supposed to be used.");
+    return ResponseVersionMsgGroup{};   
+  };
+  virtual MotorMsgGroup GetMotorMsgGroup() {
+    throw std::runtime_error(
+        "Only a derived version of this function with actual implementation "
+        "is supposed to be used.");
+    return MotorMsgGroup{};
+  };
+
 
   // any specific robot will use a specialized version of the two functions
   virtual void SendMotionCommand(double linear_vel, double angular_vel,

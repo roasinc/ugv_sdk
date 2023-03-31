@@ -26,6 +26,8 @@ class ScoutRobot : public RobotCommonInterface, public ScoutInterface {
   void Connect(std::string uart_name, uint32_t baudrate) override;
 
   void EnableCommandedMode() override;
+  std::string sendRequest() override;
+//  std::string checkVersionRequest() override;
 
   void SetMotionCommand(double linear_vel, double angular_vel) override;
   void SetLightCommand(LightMode f_mode, uint8_t f_value, LightMode r_mode,
@@ -39,6 +41,7 @@ class ScoutRobot : public RobotCommonInterface, public ScoutInterface {
   // get robot state
   ScoutCoreState GetRobotState() override;
   ScoutActuatorState GetActuatorState() override;
+  ScoutCommonSensorState GetCommonSensorState() override;
 
  protected:
   RobotCommonInterface* robot_;

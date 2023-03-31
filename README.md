@@ -61,7 +61,7 @@ $ sudo apt-get install build-essential git cmake libasio-dev
 
 ```
 $ cd <your-catkin-ws>/src
-$ git clone  https://github.com/agilexrobotics/ugv_sdk.git
+$ git clone https://github.com/westonrobot/ugv_sdk.git
 $ cd ..
 $ catkin_make
 ```
